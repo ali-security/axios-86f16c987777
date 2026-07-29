@@ -1952,6 +1952,76 @@ describe('supports http with nodejs', function () {
         });
       }).catch(done);
     });
+
+    describe('maxContentLength', function () {
+      const bigBuffer = Buffer.alloc(100, 0x61);
+
+      it('should reject a base64 data URL exceeding maxContentLength', async function () {
+        const dataURI = 'data:application/octet-stream;base64,' + bigBuffer.toString('base64');
+
+        await assert.rejects(
+          () => axios.get(dataURI, {maxContentLength: 10}),
+          (error) => {
+            assert.strictEqual(error.code, 'ERR_BAD_RESPONSE');
+            assert.strictEqual(error.message, 'maxContentLength size of 10 exceeded');
+            return true;
+          }
+        );
+      });
+
+      it('should reject a base64 data URL using %3D padding to evade the limit', async function () {
+        const dataURI = 'data:application/octet-stream;base64,' +
+          bigBuffer.toString('base64').replace(/=/g, '%3D');
+
+        await assert.rejects(
+          () => axios.get(dataURI, {maxContentLength: 10}),
+          (error) => {
+            assert.strictEqual(error.code, 'ERR_BAD_RESPONSE');
+            return true;
+          }
+        );
+      });
+
+      it('should reject a non-base64 data URL exceeding maxContentLength', async function () {
+        const dataURI = 'data:text/plain,' + 'a'.repeat(100);
+
+        await assert.rejects(
+          () => axios.get(dataURI, {maxContentLength: 10}),
+          (error) => {
+            assert.strictEqual(error.code, 'ERR_BAD_RESPONSE');
+            return true;
+          }
+        );
+      });
+
+      it('should reject an oversized data URL requested as a Stream', async function () {
+        const dataURI = 'data:application/octet-stream;base64,' + bigBuffer.toString('base64');
+
+        await assert.rejects(
+          () => axios.get(dataURI, {maxContentLength: 10, responseType: 'stream'}),
+          (error) => {
+            assert.strictEqual(error.code, 'ERR_BAD_RESPONSE');
+            return true;
+          }
+        );
+      });
+
+      it('should accept a data URL within maxContentLength', async function () {
+        const dataURI = 'data:application/octet-stream;base64,' + Buffer.from('123').toString('base64');
+
+        const {data} = await axios.get(dataURI, {maxContentLength: 100});
+
+        assert.deepStrictEqual(data, Buffer.from('123'));
+      });
+
+      it('should not enforce any limit when maxContentLength is -1', async function () {
+        const dataURI = 'data:application/octet-stream;base64,' + bigBuffer.toString('base64');
+
+        const {data} = await axios.get(dataURI, {maxContentLength: -1});
+
+        assert.strictEqual(data.length, 100);
+      });
+    });
   });
 
   describe('progress', function () {
